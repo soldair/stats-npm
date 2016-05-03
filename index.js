@@ -9,43 +9,34 @@ var cleanMetadata = require('normalize-registry-metadata')
 http.globalAgent.maxSockets = Infinity
 require('https').globalAgent.maxSockets = Infinity
 
-var yargs = require('yargs')
-  .usage('$0 [options]')
-  .option('port', {
-    alias:'p',
-    describe: 'port for server to listen on (8700).',
-    default: 8700
-  })
-  .option('registry', {
-    alias:'r',
-    describe: 'npm registry to use. anonymous stats are sent to [registry]/-/api/v1/anon-stats',
-    default: 'https://registry.npmjs.org'
-  })
-  .option('host', {
-    describe: "the host you use to access this proxy. tarball urls are rewritten to this value. default is the ip address reported by server.address()"
-  })
-  .help('h')
-  .alias('h', 'help')
-  .version(require('./package.json').version)
-
-var argv = yargs.argv
 var activeRequests = 0
-
 var address
 var tarball
-
 var started = 0
-var ended = 0
-http.createServer(function(req,res){
-  proxy(argv.registry,req,res)
-  started++;
-}).listen(argv.port,function(err){
-  if(err) throw err
-  address = 'http://'+(argv.host?argv.host:'localhost:'+this.address().port)
-  var parsed = url.parse(address)
-  tarball = {host:parsed.host,protocol:parsed.protocol}
-  console.log('started on ',address)
-})
+var ended = 0 
+
+module.exports = function(argv){
+ 
+  var s = http.createServer(function(req,res){
+    req.id = argv.id||0
+    if(argv.token) {
+      req.headers.authorization = 'Bearer '+argv.token
+    }
+    proxy(argv.registry,req,res)
+    started++;
+  }).listen(argv.port,function(err){
+    if(err) throw err
+    address = 'http://'+(argv.host?argv.host:'localhost:'+this.address().port)
+    var parsed = url.parse(address)
+    tarball = {host:parsed.host,protocol:parsed.protocol}
+
+    this.niceAddress = address;
+  })
+
+  return s
+}
+
+module.exports.logger = console.log
 
 function proxy(host,req,res,_attempts){
   if(!_attempts) activeRequests++;
@@ -64,7 +55,7 @@ function proxy(host,req,res,_attempts){
   var finished = false
   var started = false
 
-  var s = request(url.resolve(host,req.url),{method:req.method,headers:headers,agent:false})
+  var s = request(url.resolve(host,req.url),{method:req.method,headers:headers})
   s.on('response',function(pres){
     // started sending response.
     started = true;
@@ -158,6 +149,7 @@ function proxy(host,req,res,_attempts){
     // do not leak token.
     delete headers.authorization
     _attempts.push({
+      id:req.id,
       elapsed:Date.now()-time,
       start:time,
       end:Date.now(),
@@ -183,11 +175,10 @@ function proxy(host,req,res,_attempts){
       res.end(JSON.stringify({message:"failed after many attempts. ",attempts:_attempts}))
     }
 
-    console.log(JSON.stringify(_attempts))
+    module.exports.logger(JSON.stringify(_attempts))
   }
 
 }
-
 
 
 function json(b){
