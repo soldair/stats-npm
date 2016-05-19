@@ -29,9 +29,13 @@
   "homepage": "https://github.com/soldair/stats-npm#readme",
   "dependencies": {
     "normalize-registry-metadata": "^1.1.2",
+    "rc": "^1.1.6",
     "registry-auth-token": "^1.1.1",
     "request": "^2.69.0",
     "xtend": "^4.0.1",
     "yargs": "^4.2.0"
+  },
+  "devDependencies": {
+    "github-keys-pem": "^1.0.0"
   }
 }
