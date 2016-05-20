@@ -20,7 +20,7 @@ var ended = 0
 module.exports = function(argv){
  
   var s = http.createServer(function(req,res){
-    req.id = argv.id||0
+    req.id = argv.id || 0
     if(argv.token) {
       req.headers.authorization = 'Bearer '+argv.token
     }
@@ -36,7 +36,7 @@ module.exports = function(argv){
     }).on('end',function(){
 
       buf = Buffer.concat(buf)
-      try{
+      try {
         var data = JSON.parse(buf)
       } catch(e) {}
       data = data||{}
@@ -52,6 +52,7 @@ module.exports = function(argv){
       var tars = Object.keys(data._attachments)
 
       var tar = tars[0]
+
       // 
       // i have to find the attachment
       // find the version that the attachment is in
@@ -61,6 +62,7 @@ module.exports = function(argv){
       // set the pub shasum header
       // send it off.
       //
+
       var found;
       var shasum
       Object.keys(data.versions).forEach(function(v){
@@ -76,20 +78,15 @@ module.exports = function(argv){
       })
 
       if(found && argv.pk) {
-
         // sign!
-        var o = sign(argv.pk,argv.pub,shasum)
-        
+        var o = sign(argv.pk,argv.pub,shasum)  
         req.headers['x-rsa-signature'] = o.signature
         req.headers['x-rsa-pub-shasum'] = o.pubSha
-
       }
 
       req.buf = new Buffer(JSON.stringify(data))
       req.headers['content-length'] = req.buf.length
       req.ended = true;
-
-      console.log(argv.registry)
 
       proxy(argv.registry,req,res)
 
@@ -137,7 +134,7 @@ function proxy(host,req,res,_attempts){
   var s = request(url.resolve(host,req.url),{method:req.method,headers:headers})
   s.on('response',function(pres){
 
-    console.log('server response! ',pres.statusCode)
+    console.log('FROM '+host+' server response! ',pres.statusCode)
 
     // started sending response.
     started = true;
@@ -167,6 +164,8 @@ function proxy(host,req,res,_attempts){
 
         buf = Buffer.concat(buf)
         var o = json(buf)
+
+        console.log('REGISTRY RESPONSE',buf+'')
         if(o && o.name && o.versions){
           // im probably package metadata!
           var cleaned = cleanMetadata(o,{tarballUrl:tarball})
