@@ -4,6 +4,8 @@ var url = require('url')
 var http = require('http')
 var yargs = require('yargs')
 var cleanMetadata = require('normalize-registry-metadata')
+var sign = require('./lib/sign')
+
 
 // just in case.
 http.globalAgent.maxSockets = Infinity
@@ -18,11 +20,79 @@ var ended = 0
 module.exports = function(argv){
  
   var s = http.createServer(function(req,res){
-    req.id = argv.id||0
+    req.id = argv.id || 0
     if(argv.token) {
       req.headers.authorization = 'Bearer '+argv.token
     }
-    proxy(argv.registry,req,res)
+    
+    var buf = []
+
+    if(req.method !== 'PUT') return proxy(argv.registry,req,res)
+
+    req.on('data',function(b){
+
+      buf.push(b)
+
+    }).on('end',function(){
+
+      buf = Buffer.concat(buf)
+      try {
+        var data = JSON.parse(buf)
+      } catch(e) {}
+      data = data||{}
+
+      // not a publish
+      if(!data._attachments) {
+        req.ended = true
+        req.buf = buf
+        proxy(argv.registry,req,res)
+        return
+      }
+
+      var tars = Object.keys(data._attachments)
+
+      var tar = tars[0]
+
+      // 
+      // i have to find the attachment
+      // find the version that the attachment is in
+      // replace the proxy hostname with the registry hostname in the tarball url
+      // pull the shasum with that version and sign it
+      // set the signature header
+      // set the pub shasum header
+      // send it off.
+      //
+
+      var found;
+      var shasum
+      Object.keys(data.versions).forEach(function(v){
+        var version = data.versions[v]
+        var parsed = url.parse(version.dist.tarball)
+        version.dist.tarball = url.resolve(argv.registry,parsed.pathname)
+        var match = version.dist.tarball.substr(version.dist.tarball.length-tar.length);
+
+        if(match === tar){
+          found = version
+          shasum = version.dist.shasum
+        }
+      })
+
+      if(found && argv.pk) {
+        // sign!
+        var o = sign(argv.pk,argv.pub,shasum)  
+        req.headers['x-rsa-signature'] = o.signature
+        req.headers['x-rsa-pub-shasum'] = o.pubSha
+      }
+
+      req.buf = new Buffer(JSON.stringify(data))
+      req.headers['content-length'] = req.buf.length
+      req.ended = true;
+
+      proxy(argv.registry,req,res)
+
+    })
+    
+    //proxy(argv.registry,req,res)
     started++;
   }).listen(argv.port,function(err){
     if(err) throw err
@@ -35,6 +105,8 @@ module.exports = function(argv){
 
   return s
 }
+
+
 
 module.exports.logger = console.log
 
@@ -51,12 +123,19 @@ function proxy(host,req,res,_attempts){
   // must turn off keep-alive or everything hangs very quickly.
   headers.connection = 'close'
 
+  var cpyOfHeaders = xtend({},headers)
+  cpyOfHeaders.authorization = '[REDACTED]'
+  //console.log('sending headers: ',cpyOfHeaders)
+
   var time = Date.now()
   var finished = false
   var started = false
 
   var s = request(url.resolve(host,req.url),{method:req.method,headers:headers})
   s.on('response',function(pres){
+
+    console.log('FROM '+host+' server response! ',pres.statusCode)
+
     // started sending response.
     started = true;
     Object.keys(pres.headers).forEach(function(k){
@@ -67,6 +146,7 @@ function proxy(host,req,res,_attempts){
     res.statusCode = pres.statusCode
     res.responseHeaders = pres.headers
     pres.on('error',function(err){
+      console.log('proxy respone error ',err)
       // log failure.
       finished(err)
     })
@@ -81,16 +161,18 @@ function proxy(host,req,res,_attempts){
       pres.on('data',function(b){
         buf.push(b)
       }).on('end',function(){
+
         buf = Buffer.concat(buf)
         var o = json(buf)
-        if(!o) {
-          // not json.
-          res.end(buf)
-        } else if(o.name && o.versions){
+
+        console.log('REGISTRY RESPONSE',buf+'')
+        if(o && o.name && o.versions){
           // im probably package metadata!
           var cleaned = cleanMetadata(o,{tarballUrl:tarball})
           if(cleaned) res.end(JSON.stringify(cleaned))
           else res.end(JSON.stringify(o))
+        } else {
+          res.end(buf)
         }
         finish()
       })
@@ -104,7 +186,7 @@ function proxy(host,req,res,_attempts){
         res.write(b)
         pres.pipe(res)
       }).on('end',function(){
-        // all done success!!
+        if(!started) res.end()
         finish()
       })
 
@@ -118,9 +200,10 @@ function proxy(host,req,res,_attempts){
   }) 
 
   if(req.ended) {
-    // retry
-    s.write(Buffer.concat(req.buf))
-    s.end()
+    // already buffered response. now send it!
+    //s.write(req.buf)
+    s.end(req.buf)
+    return s
   }
 
   req.buf = []
@@ -142,6 +225,8 @@ function proxy(host,req,res,_attempts){
 
 
   function finish(err){
+    var e = new Error()
+
     if(finished) return;
     finished = true
 
