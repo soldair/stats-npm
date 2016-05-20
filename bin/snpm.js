@@ -57,11 +57,12 @@ var s = server({
 })
 
 // write stats to file.
-var file = path.join(process.cwd(),'snpm-stats.log')
-var ws = fs.createWriteStream(file,{flags:'w'})
+var file = path.join(process.env.HOME||process.cwd(),'snpm-stats.log')
+var ws = fs.createWriteStream(file,{flags:'a'})
 
 var messages = 0
 server.logger = function(s){
+
   messages++
   ws.write(s+"\n")
 }

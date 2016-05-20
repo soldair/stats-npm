@@ -125,7 +125,7 @@ function proxy(host,req,res,_attempts){
 
   var cpyOfHeaders = xtend({},headers)
   cpyOfHeaders.authorization = '[REDACTED]'
-  console.log('sending headers: ',cpyOfHeaders)
+  //console.log('sending headers: ',cpyOfHeaders)
 
   var time = Date.now()
   var finished = false
