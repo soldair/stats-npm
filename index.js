@@ -121,6 +121,7 @@ function proxy(host,req,res,_attempts){
     // retry
     s.write(Buffer.concat(req.buf))
     s.end()
+    return s
   }
 
   req.buf = []
