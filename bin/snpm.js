@@ -3,6 +3,7 @@ var server = require('../')
 var path = require('path')
 var fs = require('fs')
 var argv = process.argv
+var os = require('os')
 
 var idx = argv.indexOf('--registry')
 var reg = 'https://registry.npmjs.org'
@@ -44,19 +45,29 @@ s.on('listening',function(){
 
   var original = process.argv.slice(2);
   original.push('--registry',this.niceAddress)
-  spawn('npm', original, opts)
-  .on('exit',function(code){ 
+  spawn(getNpmExecutableName(), original, opts)
+  .on('exit',function(code){
     s.close()
     if(!messages) {
       console.error('npm didn\'t make any requests. no stats to report.')
-      process.exit(code) 
+      process.exit(code)
     } else {
       ws.write(JSON.stringify({id:id,type:"exit",elapsed:Date.now()-time,start:time,end:Date.now(),code:code,argv:argv.slice(2)}))
       ws.on('close',function(){
         console.error('npm stats written to '+file)
-        process.exit(code); 
+        process.exit(code);
       })
       ws.end()
     }
   });
 })
+
+function getNpmExecutableName() {
+  var npmExecutableName = 'npm'
+
+  if (os.type() === 'Windows_NT') {
+    npmExecutableName += '.cmd'
+  }
+
+  return npmExecutableName
+}
