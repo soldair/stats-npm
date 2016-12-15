@@ -16,6 +16,7 @@ if(idx > -1) {
 var token = require('registry-auth-token')(reg)
 
 var id = Date.now().toString(32)
+
 var s = server({
   id:id,
   registry:reg,
@@ -26,6 +27,10 @@ var s = server({
 // write stats to file.
 var file = path.join(process.cwd(),'snpm-stats.log')
 var ws = fs.createWriteStream(file,{flags:'a+'})
+
+// log startup.
+ws.write(JSON.stringify({id:id,type:"start",start:time,end:Date.now(),argv:argv.slice(2)}))
+
 
 var messages = 0
 server.logger = function(s){
@@ -64,6 +69,12 @@ s.on('listening',function(){
     }
   });
 })
+
+process.on('uncaughtException',function(err){
+  ws.write(JSON.stringify({id:id,type:"crash",elapsed:Date.now()-time,start:time,end:Date.now(),argv:argv.slice(2),error:err+' '+err.stack}))
+  throw err
+})
+
 
 function getNpmExecutableName() {
   var npmExecutableName = 'npm'
