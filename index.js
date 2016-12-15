@@ -4,6 +4,7 @@ var url = require('url')
 var http = require('http')
 var yargs = require('yargs')
 var cleanMetadata = require('normalize-registry-metadata')
+var ts = require('monotonic-timestamp')
 
 // just in case.
 http.globalAgent.maxSockets = Infinity
@@ -41,7 +42,7 @@ module.exports.logger = console.log
 function proxy(host,req,res,_attempts){
   if(!_attempts) activeRequests++;
 
-  _attempts = _attempts || []
+  _attempts = _attempts||{tries:0,id:genid()};
   var uri = req.url
 
   var headers = xtend({},req.headers) 
@@ -54,6 +55,23 @@ function proxy(host,req,res,_attempts){
   var time = Date.now()
   var finished = false
   var started = false
+
+  // request headers safe for logging.
+  var logHeaders = xtend({},req.headers) 
+  delete logHeaders.authorization
+
+  logjson({
+    type:"request-start",
+    snpmid:_attempts._id,
+    attempt:_attempts.tries,
+    start:time,
+    id:req.id,
+    url:req.url,
+    method:req.method,
+    host:host,
+    requests:activeRequests,
+    reqHeaders:logHeaders
+  })
 
   var s = request(url.resolve(host,req.url),{method:req.method,headers:headers})
   s.on('response',function(pres){
@@ -148,8 +166,11 @@ function proxy(host,req,res,_attempts){
 
     activeRequests--
     // do not leak token.
-    delete headers.authorization
-    _attempts.push({
+    
+    logData = {
+      type:"request",
+      snpmid:_attempts.id,
+      attempt:_attempts.tries,
       id:req.id,
       elapsed:Date.now()-time,
       start:time,
@@ -161,24 +182,31 @@ function proxy(host,req,res,_attempts){
       host:host,
       requests:activeRequests,
       body:req.buf.length,
-      reqHeaders:headers,
+      reqHeaders:logHeaders,
       resHeaders:res.responseHeaders
-    })
+    }
 
-    if(!started && _attempts.length < 4) {
+    _attempts.tries++
+
+    // this logic might break head requests. 
+    // it reads strangely at any rate so we should fix it.
+    if(!started && _attempts.tries < 4) {
+      logjson(logData)
       return proxy(host,req,res,_attempts) 
     }
 
-    //log it!!!
-
     if(err) {
       res.statusCode = 500
-      res.end(JSON.stringify({message:"failed after many attempts. ",attempts:_attempts}))
+      res.end(JSON.stringify({message:"failed after "+_attempts.tries+"attempts."}))
     }
 
-    module.exports.logger(JSON.stringify(_attempts))
+    logjson(logData)
   }
 
+}
+
+function logjson(o){
+  module.exports.logger(JSON.stringify(o))
 }
 
 
@@ -191,3 +219,6 @@ function json(b){
 }
 
 
+function genid(){
+  return ts().toString(32)
+}

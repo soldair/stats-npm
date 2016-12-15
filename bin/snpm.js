@@ -45,6 +45,9 @@ s.on('listening',function(){
 
   var original = process.argv.slice(2);
   original.push('--registry',this.niceAddress)
+
+  console.log('spawning npm with args:  ',original)
+
   spawn(getNpmExecutableName(), original, opts)
   .on('exit',function(code){
     s.close()
