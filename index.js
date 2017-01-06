@@ -62,7 +62,7 @@ function proxy(host,req,res,_attempts){
 
   logjson({
     type:"request-start",
-    snpmid:_attempts._id,
+    snpmid:_attempts.id,
     attempt:_attempts.tries,
     start:time,
     id:req.id,

@@ -29,7 +29,7 @@ var file = path.join(process.cwd(),'snpm-stats.log')
 var ws = fs.createWriteStream(file,{flags:'a+'})
 
 // log startup.
-ws.write(JSON.stringify({id:id,type:"start",start:time,end:Date.now(),argv:argv.slice(2)}))
+ws.write(JSON.stringify({id:id,type:"start",start:Date.now(),argv:argv.slice(2)})+"\n")
 
 
 var messages = 0
